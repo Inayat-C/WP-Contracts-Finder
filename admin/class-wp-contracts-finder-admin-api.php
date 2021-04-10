@@ -21,7 +21,7 @@ class Wp_Contracts_Finder_Admin_Api {
 	 * @var      string    $endpoint    The API endpoint URL.
 	 */
     public $endpoint;
-    
+
     public function __construct() {
 
         $this->endpoint = 'https://www.contractsfinder.service.gov.uk/api/rest/2/search_notices/json';
@@ -64,14 +64,14 @@ class Wp_Contracts_Finder_Admin_Api {
         $body = wp_json_encode( $body );
 
         return $body;
-        
+
     }
 
     public function create_posts_from_api_request($response) {
         $data = $response['noticeList'];
 
         foreach ($data as $content) {
-			
+
 			$post_arr = array(
 				'post_type'		=> 'contracts',
 				'post_title'   	=> $content['item']['title'],
@@ -120,11 +120,45 @@ class Wp_Contracts_Finder_Admin_Api {
             } else {
 
                 write_log('duplicate post found ' . $content['item']['title']);
-                
+
             }
-        
+
         }
 
         wp_send_json_success($response);
+    }
+
+    public function remove_expired_posts() {
+        // Args to fetch all contracts
+        $args = array(
+          'post_type'    => 'contracts',
+          'post_status'  => ['draft', 'publish'],
+          'orderby' => 'post_date',
+          'order' => 'DESC',
+          'numberposts' => -1
+        );
+        // Fetch all contracts
+        $posts = get_posts($args);
+
+        // Loop through all posts
+        foreach ($posts as $post) :
+            // Get all post meta data
+            $post_meta = get_post_meta($post->ID);
+            // Get deadlinedate Object
+            $deadlinedate_obj = $post_meta['deadlinedate'][0];
+            // Convert deadlinedate to timestamp
+            $deadlinedate_timestamp = strtotime($deadlinedate_obj);
+            // Convert timestamp to date
+            $deadlinedate = date('Y/m/d', $deadlinedate_timestamp);
+            // Get current date
+            $date_now = date('Y/m/d');
+
+            // Compare dates
+            if ($date_now >= $deadlinedate) {
+                // move to trash > output to log deleted post.
+                wp_trash_post($post->ID);
+                write_log('Expired contract post with title of "' . $post->post_title . '" moved to trash.');
+            };
+        endforeach;
     }
 }
